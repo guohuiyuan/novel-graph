@@ -1,46 +1,45 @@
 from __future__ import annotations
 
-import json
-
+from novel_graph.analysis.llm_graph import build_llm_graph, reduce_llm_graphs
 from novel_graph.analysis.simple_graph import build_lightweight_graph
 from novel_graph.domain.models import NovelInput, Provider, ScanMode, ScanResult
 from novel_graph.rendering.markdown_renderer import heuristic_graph_scan_markdown
-from novel_graph.services.llm_client import LLMClient
-from novel_graph.services.prompt_repo import read_prompt, read_resource
-
-SYSTEM_PROMPT = (
-    "你是专业的后宫文扫书编辑，擅长把知识图谱摘要融合进扫书报告。"
-    "输出必须是结构化中文Markdown。"
-)
 
 
 def run_graph_scan(
     novel_input: NovelInput, provider: Provider, model: str | None = None
 ) -> ScanResult:
-    graph = build_lightweight_graph(novel_input.raw_text)
+    if provider == Provider.HEURISTIC:
+        graph = build_lightweight_graph(novel_input.raw_text)
+        return _graph_scan_result(novel_input, graph)
+
+    graph = build_llm_graph(novel_input, model=model)
+    return _graph_scan_result(novel_input, graph)
+
+
+def run_graph_scan_segments(
+    novel_input: NovelInput,
+    segment_inputs: list[NovelInput],
+    provider: Provider,
+    model: str | None = None,
+) -> ScanResult:
+    if not segment_inputs:
+        return run_graph_scan(novel_input, provider=provider, model=model)
 
     if provider == Provider.HEURISTIC:
-        markdown = heuristic_graph_scan_markdown(novel_input, graph=graph)
-        return ScanResult(
-            title=novel_input.title, mode=ScanMode.GRAPH, markdown=markdown, graph=graph
-        )
+        segment_graphs = [build_lightweight_graph(item.raw_text) for item in segment_inputs]
+        graph = segment_graphs[0]
+        if len(segment_graphs) > 1:
+            graph.metadata["source_segments"] = len(segment_graphs)
+        return _graph_scan_result(novel_input, graph)
 
-    prompt_template = read_prompt("graph_scan.md")
-    requirements = read_resource("scan_requirements.md")
-    term_reference = read_resource("term_reference.md")
-    style_reference = read_resource("style_reference.md")
+    segment_graphs = [build_llm_graph(item, model=model) for item in segment_inputs]
+    graph = reduce_llm_graphs(novel_input, segment_graphs, model=model)
+    return _graph_scan_result(novel_input, graph)
 
-    prompt = prompt_template.format(
-        title=novel_input.title,
-        requirements=requirements,
-        term_reference=term_reference,
-        style_reference=style_reference,
-        graph_json=json.dumps(graph.to_dict(), ensure_ascii=False, indent=2),
-        text_excerpt=novel_input.raw_text,
-    )
 
-    llm = LLMClient(model=model)
-    markdown = llm.generate_markdown(system_prompt=SYSTEM_PROMPT, user_prompt=prompt)
+def _graph_scan_result(novel_input: NovelInput, graph) -> ScanResult:
+    markdown = heuristic_graph_scan_markdown(novel_input, graph=graph)
     return ScanResult(
         title=novel_input.title, mode=ScanMode.GRAPH, markdown=markdown, graph=graph
     )

@@ -63,6 +63,14 @@ class LightweightGraph:
             "metadata": self.metadata,
         }
 
+    @classmethod
+    def from_dict(cls, data: dict) -> "LightweightGraph":
+        return cls(
+            nodes=[GraphNode(**item) for item in data.get("nodes", [])],
+            edges=[GraphEdge(**item) for item in data.get("edges", [])],
+            metadata=data.get("metadata", {}) or {},
+        )
+
 
 @dataclass(slots=True)
 class ScanResult:
