@@ -36,7 +36,7 @@ def run_graph_scan(
         term_reference=term_reference,
         style_reference=style_reference,
         graph_json=json.dumps(graph.to_dict(), ensure_ascii=False, indent=2),
-        text_excerpt=novel_input.raw_text[:12000],
+        text_excerpt=novel_input.raw_text,
     )
 
     llm = LLMClient(model=model)

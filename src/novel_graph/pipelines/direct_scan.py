@@ -28,7 +28,7 @@ def run_direct_scan(
         requirements=requirements,
         term_reference=term_reference,
         style_reference=style_reference,
-        text_excerpt=novel_input.raw_text[:16000],
+        text_excerpt=novel_input.raw_text,
     )
 
     llm = LLMClient(model=model)

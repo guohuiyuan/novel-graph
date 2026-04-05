@@ -1,17 +1,28 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
+from dotenv import load_dotenv
 from openai import OpenAI
+
+
+def _load_env_once() -> None:
+    project_env = Path(__file__).resolve().parents[3] / ".env"
+    if project_env.exists():
+        load_dotenv(project_env, override=False)
+    else:
+        load_dotenv(override=False)
+
+
+_load_env_once()
 
 
 class LLMClient:
     def __init__(self, model: str | None = None) -> None:
         self.api_key = os.getenv("OPENAI_API_KEY", "").strip()
-        self.base_url = os.getenv(
-            "OPENAI_BASE_URL", "https://api.openai.com/v1"
-        ).strip()
-        self.model = model or os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+        self.base_url = os.getenv("OPENAI_BASE_URL", "https://jj20cm.us.ci/v1").strip()
+        self.model = model or os.getenv("OPENAI_MODEL", "gpt-5.4")
 
     @property
     def enabled(self) -> bool:
