@@ -33,6 +33,10 @@ class GraphNode:
     label: str
     category: str
     weight: int = 1
+    chapter_hits: int = 0
+    role: str | None = None
+    evidence: str | None = None
+    tags: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -41,17 +45,22 @@ class GraphEdge:
     target: str
     relation: str
     weight: int = 1
+    chapter_hits: int = 0
+    evidence: str | None = None
+    tags: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
 class LightweightGraph:
     nodes: list[GraphNode] = field(default_factory=list)
     edges: list[GraphEdge] = field(default_factory=list)
+    metadata: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
             "nodes": [asdict(node) for node in self.nodes],
             "edges": [asdict(edge) for edge in self.edges],
+            "metadata": self.metadata,
         }
 
 

@@ -4,7 +4,7 @@ import json
 
 from novel_graph.analysis.simple_graph import build_lightweight_graph
 from novel_graph.domain.models import NovelInput, Provider, ScanMode, ScanResult
-from novel_graph.rendering.markdown_renderer import heuristic_scan_markdown
+from novel_graph.rendering.markdown_renderer import heuristic_graph_scan_markdown
 from novel_graph.services.llm_client import LLMClient
 from novel_graph.services.prompt_repo import read_prompt, read_resource
 
@@ -20,7 +20,7 @@ def run_graph_scan(
     graph = build_lightweight_graph(novel_input.raw_text)
 
     if provider == Provider.HEURISTIC:
-        markdown = heuristic_scan_markdown(novel_input, graph=graph)
+        markdown = heuristic_graph_scan_markdown(novel_input, graph=graph)
         return ScanResult(
             title=novel_input.title, mode=ScanMode.GRAPH, markdown=markdown, graph=graph
         )
