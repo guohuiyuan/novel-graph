@@ -5,7 +5,6 @@ from novel_graph.rendering.markdown_renderer import heuristic_scan_markdown
 from novel_graph.services.llm_client import LLMClient
 from novel_graph.services.prompt_repo import read_prompt, read_resource
 
-
 SYSTEM_PROMPT = "你是专业的后宫文扫书编辑，输出必须是结构化中文Markdown。"
 
 
@@ -13,7 +12,7 @@ def run_direct_scan(
     novel_input: NovelInput, provider: Provider, model: str | None = None
 ) -> ScanResult:
     if provider == Provider.HEURISTIC:
-        markdown = heuristic_scan_markdown(novel_input.title, novel_input.raw_text)
+        markdown = heuristic_scan_markdown(novel_input)
         return ScanResult(
             title=novel_input.title, mode=ScanMode.DIRECT, markdown=markdown
         )

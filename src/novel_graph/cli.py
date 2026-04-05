@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 import re
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -109,7 +109,13 @@ def scan(
     segment_index: Annotated[int, typer.Option(help="要扫描的分段序号（从1开始）")] = 1,
 ) -> None:
     novel_input = load_novel_input(input_path)
-    segments = _split_segments_by_token_budget(novel_input.raw_text, segment_tokens)
+    effective_segment_tokens = segment_tokens
+    if provider == Provider.HEURISTIC and segment_tokens == 40000:
+        effective_segment_tokens = 0
+
+    segments = _split_segments_by_token_budget(
+        novel_input.raw_text, effective_segment_tokens
+    )
 
     if segment_index < 1 or segment_index > len(segments):
         raise typer.BadParameter(
@@ -121,13 +127,20 @@ def scan(
     if len(segments) > 1:
         selected_title = f"{novel_input.title}（第{segment_index}/{len(segments)}段）"
         typer.echo(
-            f"[segment] 采用分段输入: {segment_index}/{len(segments)}，约 {_estimate_tokens(selected_text)} tokens"
+            (
+                f"[segment] 采用分段输入: {segment_index}/{len(segments)}，"
+                f"约 {_estimate_tokens(selected_text)} tokens"
+            )
         )
 
     segmented_input = type(novel_input)(
         source_path=novel_input.source_path,
         title=selected_title,
         raw_text=selected_text,
+        author=novel_input.author,
+        publisher=novel_input.publisher,
+        published_at=novel_input.published_at,
+        description=novel_input.description,
     )
 
     suffix = "" if len(segments) == 1 else f".part{segment_index}"

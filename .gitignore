@@ -10,5 +10,5 @@ build/
 *.pyo
 *.pyd
 *.log
-output/
+output*/
 examples/

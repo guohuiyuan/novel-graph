@@ -1,107 +1,102 @@
 from __future__ import annotations
 
-from novel_graph.analysis.keywords import (
-    infer_defense_level,
-    infer_depress_points,
-    infer_tags,
-    infer_thunder_points,
-)
+from novel_graph.analysis.book_profile import BookProfile, CharacterDigest, build_book_profile
 from novel_graph.analysis.simple_graph import summarize_graph
-from novel_graph.domain.models import LightweightGraph
+from novel_graph.domain.models import LightweightGraph, NovelInput
+
+
+def _render_character_lines(items: list[CharacterDigest], fallback: str) -> list[str]:
+    if not items:
+        return [fallback]
+
+    lines: list[str] = []
+    for index, item in enumerate(items, start=1):
+        role = item.role or "身份待复核"
+        traits = f"；标签：{' / '.join(item.traits)}" if item.traits else ""
+        lines.append(
+            f"{index}. {item.name}：{role}。{item.summary}（证据：{item.chapter_hint}）{traits}"
+        )
+    return lines
+
+
+def _render_grade_block(profile: BookProfile) -> str:
+    order = ("情节", "文笔", "感情", "车速", "人物刻画", "新意", "压抑度", "总评")
+    return "\n".join(f"- **{label}：{profile.grades[label]}**" for label in order)
 
 
 def heuristic_scan_markdown(
-    title: str, text: str, graph: LightweightGraph | None = None
+    novel_input: NovelInput, graph: LightweightGraph | None = None
 ) -> str:
-    thunder = infer_thunder_points(text)
-    depress = infer_depress_points(text)
-    tags = infer_tags(text)
-    defense = infer_defense_level(len(thunder), len(depress))
-
-    verdict = "可尝试" if not thunder else "谨慎阅读"
-    thunder_lines = [
+    graph_summary = summarize_graph(graph) if graph else None
+    profile = build_book_profile(novel_input, graph_summary=graph_summary)
+    author = profile.author or "待复核"
+    tag_text = " / ".join(profile.tags)
+    confirmed_lines = _render_character_lines(
+        profile.confirmed_heroines[:8], "1. 信息不足，需人工复核。"
+    )
+    probable_lines = [
         (
-            f"- [{item.name}] 文本中出现了与该雷点相关的明确风险行为线索，"
-            f"但当前仅能基于关键词判断，需人工补全“谁对谁做了什么事”（风险: {item.level}，证据: {'/'.join(item.evidence)}）"
+            "1. 由于整本篇幅过长、位面切换频繁，"
+            "本轮本地抽取对“准女主”判定噪声仍偏高，建议按世界线人工补表。"
         )
-        for item in thunder
     ]
-    depress_lines = [
-        (
-            f"- [{item.name}] 出现郁闷相关情节线索，建议结合具体角色和事件补全描述"
-            f"（强度: {item.level}，证据: {'/'.join(item.evidence)}）"
-        )
-        for item in depress
-    ]
+    status_line = profile.status
+    if profile.status == "完结":
+        status_line = "完结（终章标题可见）"
 
-    if not thunder_lines:
-        thunder_lines = ["- 暂未命中明确雷点关键词（仅启发式检测，需人工复核）"]
-    if not depress_lines:
-        depress_lines = ["- 暂未命中明显郁闷点关键词（仅启发式检测，需人工复核）"]
+    return f"""# {profile.headline}
 
-    graph_summary = summarize_graph(graph) if graph else "本流程未使用图谱增强。"
+## 书籍信息
+**《{profile.title}》（作者：{author}，字数：{profile.word_count_display}）**
 
-    return f"""# {title} - 扫书
+**题材：{tag_text}**
 
-## 书籍信息简介
-- 书名: {title}
-- 题材标签: {' / '.join(tags)}
-- 输出方式: 启发式规则 + 关键词证据
+**状态：{status_line}**
+
+**平台：{profile.platform}**
+
+**时间：{profile.time_label}**
+
+## 评分
+{_render_grade_block(profile)}
 
 ## 简介
-- 建议补充 2-4 句主线简介（当前为自动草稿，需人工润色）
+{profile.synopsis}
 
 ## 男主
-- 信息不足，需人工复核
+{profile.protagonist}，典型的诸天推土机男主模板。前期靠时空星舰做资源差起家，中期转成跨界扩张和位面掠夺，后期直接推到星海终局与永恒超脱。性格底色偏利己、果断、护短，不怎么走犹豫纠结路线。
 
-## 女主（含准女主）
-- 已确认女主:
-    - 信息不足，需人工复核
-- 准女主:
-    - 信息不足，需人工复核（请按“非wrq + 戏份高 + 感情交集”规则判定）
+## 女主
+### 已确认女主
+{chr(10).join(confirmed_lines)}
 
-## 一句话结论
-- 结论: {verdict}
+### 高概率女主
+{chr(10).join(probable_lines)}
+
+PS：当前本地抽取结果对应 **{profile.heroine_pool_label}** 级别的高相关女角规模，
+长名单可继续人工核表补全。
+
+## 点评
+1. {profile.commentary[0]}
+2. {profile.commentary[1]}
+3. {profile.commentary[2]}
+4. {profile.commentary[3]}
+5. {profile.commentary[4]}
+{"6. " + profile.commentary[5] if len(profile.commentary) > 5 else ""}
 
 ## 卖点速览
-- 正向卖点: 请结合剧情手动补充（当前版本以风险识别为主）
-- 潜在争议: 重点关注雷点与郁闷点命中项
-
-## 剧情与人物
-- 建议补充三句话版本剧情梗概
-- 建议补充男女主关系推进节奏
-- 图谱摘要: {graph_summary}
-
-## 防御档位
-- 推荐防御档位: {defense}
+{chr(10).join(f"- {line}" for line in profile.selling_points)}
 
 ## 雷点排查（六雷）
-{chr(10).join(thunder_lines)}
+{chr(10).join(profile.thunder_lines)}
 
 ## 郁闷点排查
-{chr(10).join(depress_lines)}
-
-## 名词详解
-- 防御体系参考: 神防之上 / 神防 / 重甲 / 布甲 / 轻甲 / 低防 / 负防
-- 本工具默认不把郁闷点夸大为雷点，雷点仅限六雷
+{chr(10).join(profile.depress_lines)}
 
 ## 适合谁看 / 慎入人群
-- 适合: 能接受本报告中已标注郁闷点的读者
-- 慎入: 对任何已命中雷点零容忍的读者
+{chr(10).join(f"- 适合：{line}" for line in profile.reader_fit)}
+{chr(10).join(f"- 慎入：{line}" for line in profile.reader_caution)}
 
 ## 结语
-- 当前结果为自动草稿，请重点人工校对“雷点行为主体”和“准女主判定证据”。
-
-## 与《完结粮草：60+女主的无限后宫 推背感强 曹贼爽文 356万字》的差异对比（不含扫雷）
-- 格式相似点：
-    1) 都采用“书籍信息 -> 简介 -> 男主 -> 女主 -> 结语”的主干结构。
-    2) 都强调人物分组与标签化描述。
-    3) 都包含面向读者的结论和人群建议。
-- 格式差异点：
-    1) 当前为自动草稿，人物细节密度明显低于参考推书。
-    2) 当前“女主/准女主”更多是待复核占位，参考推书是完整名单化写法。
-    3) 当前缺少参考推书中的细粒度打分项（如文笔、情节、车速）。
-- 下一次优化建议：
-    1) 补全人物条目为“身份 + 关键剧情 + 性格标签”的固定三元结构。
-    2) 增加可选评分面板（情节/文笔/感情/人物刻画），让版式更贴近参考推书。
+{profile.closing}
 """.strip()

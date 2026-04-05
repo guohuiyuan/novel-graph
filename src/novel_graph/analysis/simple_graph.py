@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections import Counter, defaultdict
 import re
+from collections import Counter, defaultdict
 
 from novel_graph.analysis.keywords import top_candidate_names
 from novel_graph.domain.models import GraphEdge, GraphNode, LightweightGraph
@@ -54,6 +54,7 @@ def summarize_graph(graph: LightweightGraph) -> str:
     if not graph.nodes:
         return "未抽取到稳定角色实体，建议补充更多正文内容后重试。"
 
+    label_map = {node.id: node.label for node in graph.nodes}
     core_nodes = sorted(graph.nodes, key=lambda node: node.weight, reverse=True)[:5]
     core_text = "、".join(f"{node.label}(出现{node.weight}次)" for node in core_nodes)
 
@@ -62,6 +63,10 @@ def summarize_graph(graph: LightweightGraph) -> str:
 
     core_edges = sorted(graph.edges, key=lambda edge: edge.weight, reverse=True)[:5]
     edge_text = "；".join(
-        f"{edge.source}->{edge.target}(共现{edge.weight}次)" for edge in core_edges
+        (
+            f"{label_map.get(edge.source, edge.source)}"
+            f"->{label_map.get(edge.target, edge.target)}(共现{edge.weight}次)"
+        )
+        for edge in core_edges
     )
     return f"核心角色：{core_text}。高频互动边：{edge_text}。"

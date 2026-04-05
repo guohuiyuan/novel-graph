@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from pathlib import Path
 
@@ -22,6 +21,10 @@ class NovelInput:
     source_path: Path
     title: str
     raw_text: str
+    author: str | None = None
+    publisher: str | None = None
+    published_at: str | None = None
+    description: str | None = None
 
 
 @dataclass(slots=True)

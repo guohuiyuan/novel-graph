@@ -4,7 +4,6 @@ from typer.testing import CliRunner
 
 from novel_graph.cli import app
 
-
 runner = CliRunner()
 
 
