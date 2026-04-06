@@ -51,11 +51,13 @@ def test_heuristic_graph_scan_markdown_renders_graph_sections(tmp_path: Path) ->
 
     markdown = heuristic_graph_scan_markdown(novel_input, graph)
 
-    assert "知识图谱速览" in markdown
+    assert "原文知识图谱" in markdown
     assert "## 男主" in markdown
     assert "## 女主" in markdown
     assert "云绮君" in markdown
     assert "高频关系边" in markdown
+    assert "剧情线索" in markdown
+    assert "关键地点" in markdown
     assert "雷点/提示：" in markdown
 
 
@@ -71,6 +73,9 @@ def test_graph_from_payload_builds_profiles_and_edges() -> None:
                     "label": "古代王朝",
                     "summary": "男主先在古代线扶龙起家。",
                     "heroine_focus": "羽澶",
+                    "key_characters": ["秦烽", "羽澶"],
+                    "key_locations": ["大齐王都"],
+                    "key_events": ["扶龙起家"],
                 }
             ],
             "protagonist_profile": {
@@ -94,6 +99,19 @@ def test_graph_from_payload_builds_profiles_and_edges() -> None:
                     "score": 90,
                 }
             ],
+            "character_profiles": [
+                {
+                    "name": "云绮君",
+                    "entity_type": "character",
+                    "role": "公主",
+                    "worldline": "古代王朝",
+                    "summary": "古代线的高位人物。",
+                    "tags": ["高位角色"],
+                    "evidence": "云绮君身为公主。",
+                    "score": 76,
+                    "importance": "major",
+                }
+            ],
             "supporting_profiles": [
                 {
                     "name": "赵元谨",
@@ -103,6 +121,44 @@ def test_graph_from_payload_builds_profiles_and_edges() -> None:
                     "risk_tags": ["待复核"],
                     "evidence": "赵元谨主动示好。",
                     "score": 40,
+                }
+            ],
+            "location_profiles": [
+                {
+                    "name": "大齐王都",
+                    "entity_type": "location",
+                    "role": "皇城",
+                    "worldline": "古代王朝",
+                    "summary": "古代线的核心舞台。",
+                    "tags": ["王朝核心地带"],
+                    "evidence": "秦烽在大齐王都见到云绮君。",
+                    "score": 60,
+                }
+            ],
+            "faction_profiles": [
+                {
+                    "name": "大齐皇室",
+                    "entity_type": "faction",
+                    "role": "皇室",
+                    "worldline": "古代王朝",
+                    "summary": "古代线的统治势力。",
+                    "tags": ["皇室"],
+                    "evidence": "云绮君身为公主。",
+                    "score": 55,
+                }
+            ],
+            "plot_threads": [
+                {
+                    "title": "扶龙起家",
+                    "worldline": "古代王朝",
+                    "stage": "起势",
+                    "summary": "秦烽在古代线借势扩张。",
+                    "importance": 80,
+                    "involved_characters": ["秦烽", "云绮君"],
+                    "key_locations": ["大齐王都"],
+                    "related_factions": ["大齐皇室"],
+                    "tags": ["古代扩张"],
+                    "evidence": "男主先在古代线扶龙起家。",
                 }
             ],
             "relationship_highlights": [
@@ -122,7 +178,11 @@ def test_graph_from_payload_builds_profiles_and_edges() -> None:
     assert graph.metadata["protagonist"] == "秦烽"
     assert graph.metadata["heroine_profiles"][0]["name"] == "羽澶"
     assert graph.metadata["worldline_order"] == ["诸天常驻", "古代王朝"]
+    assert graph.metadata["location_profiles"][0]["name"] == "大齐王都"
+    assert graph.metadata["plot_threads"][0]["title"] == "扶龙起家"
     assert any(edge.relation == "后宫候选" for edge in graph.edges)
+    assert any(node.category == "地点" and node.label == "大齐王都" for node in graph.nodes)
+    assert any(node.category == "剧情" and node.label == "扶龙起家" for node in graph.nodes)
 
 
 def test_run_graph_scan_openai_uses_llm_graph_payload(monkeypatch, tmp_path: Path) -> None:
@@ -148,6 +208,32 @@ def test_run_graph_scan_openai_uses_llm_graph_payload(monkeypatch, tmp_path: Pat
                 "relation_summary": "与男主高频绑定。",
                 "evidence": "舰灵羽澶在星舰中苏醒。",
                 "score": 90,
+            }
+        ],
+        "location_profiles": [
+            {
+                "name": "星舰",
+                "entity_type": "location",
+                "role": "移动基地",
+                "worldline": "诸天常驻",
+                "summary": "羽澶苏醒并长期活动的地点。",
+                "tags": ["常驻场景"],
+                "evidence": "舰灵羽澶在星舰中苏醒。",
+                "score": 62,
+            }
+        ],
+        "plot_threads": [
+            {
+                "title": "舰灵绑定线",
+                "worldline": "诸天常驻",
+                "stage": "建立绑定",
+                "summary": "羽澶与秦烽形成高频绑定。",
+                "importance": 85,
+                "involved_characters": ["秦烽", "羽澶"],
+                "key_locations": ["星舰"],
+                "related_factions": [],
+                "tags": ["伴生线"],
+                "evidence": "羽澶陪伴秦烽出手。",
             }
         ],
         "supporting_profiles": [],
@@ -186,6 +272,8 @@ def test_run_graph_scan_openai_uses_llm_graph_payload(monkeypatch, tmp_path: Pat
     assert result.graph.metadata["method"] == "mirofish-llm-graph"
     assert "羽澶" in result.markdown
     assert "图谱方法" in result.markdown
+    assert "剧情线索" in result.markdown
+    assert "关键地点" in result.markdown
 
 
 def test_reduce_llm_graphs_merges_segment_worldlines() -> None:
@@ -372,6 +460,7 @@ def test_run_graph_scan_segments_uses_aggregated_graph(monkeypatch, tmp_path: Pa
     assert result.graph is not None
     assert result.graph.metadata["source_segments"] == 2
     assert "世界线推进" in result.markdown
+    assert "原文知识图谱" in result.markdown
     assert "林曦涵" in result.markdown
 
 

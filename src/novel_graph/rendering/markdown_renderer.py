@@ -21,7 +21,7 @@ from novel_graph.analysis.book_profile import (
     _strip_toc,
     build_book_profile,
 )
-from novel_graph.analysis.simple_graph import summarize_graph
+from novel_graph.analysis.graph_summary import summarize_graph
 from novel_graph.domain.models import LightweightGraph, NovelInput
 
 
@@ -114,17 +114,84 @@ def _render_supporting_profiles(items: list[dict]) -> str:
     )
 
 
+def _render_context_profiles(items: list[dict], empty_text: str) -> str:
+    if not items:
+        return empty_text
+
+    blocks: list[str] = []
+    for index, item in enumerate(items, start=1):
+        role = item.get("role") or "定位待复核"
+        summary = item.get("summary") or "正文证据不足，当前定位待复核。"
+        worldline = item.get("worldline")
+        relation = item.get("relation_summary")
+        tags = " / ".join(item.get("tags") or ["待复核"])
+        evidence = item.get("evidence") or "正文证据待补"
+
+        lines = [f"{index}. {item['name']}，{role}。", f"简介：{summary}"]
+        if worldline and worldline != "待复核":
+            lines.append(f"所属世界线：{worldline}")
+        if relation:
+            lines.append(f"与主线关系：{relation}")
+        lines.append(f"标签：{tags}")
+        lines.append(f"图谱证据：{evidence}")
+        blocks.append("\n".join(lines))
+
+    return "\n\n".join(blocks)
+
+
+def _render_plot_threads(items: list[dict]) -> str:
+    if not items:
+        return "1. 当前图谱未稳定抽出主线剧情。"
+
+    blocks: list[str] = []
+    for index, item in enumerate(items, start=1):
+        worldline = item.get("worldline") or "待复核"
+        stage = item.get("stage") or "待复核"
+        summary = item.get("summary") or "正文证据不足，剧情线待复核。"
+        chars = "、".join(item.get("involved_characters") or []) or "待复核"
+        locations = "、".join(item.get("key_locations") or []) or "待复核"
+        factions = "、".join(item.get("related_factions") or []) or "待复核"
+        tags = " / ".join(item.get("tags") or ["待复核"])
+        evidence = item.get("evidence") or "正文证据待补"
+
+        blocks.append(
+            "\n".join(
+                [
+                    f"{index}. {item['title']}（{worldline}）",
+                    f"阶段：{stage}",
+                    f"摘要：{summary}",
+                    f"涉及人物：{chars}",
+                    f"关键地点：{locations}",
+                    f"相关势力：{factions}",
+                    f"标签：{tags}",
+                    f"图谱证据：{evidence}",
+                ]
+            )
+        )
+
+    return "\n\n".join(blocks)
+
+
 def _render_segment_overview(items: list[dict]) -> str:
     if not items:
         return "- 世界线推进待复核。"
-    return "\n".join(
-        (
+    lines: list[str] = []
+    for item in items:
+        extras: list[str] = []
+        if item.get("heroine_focus"):
+            extras.append("情感焦点：" + item["heroine_focus"])
+        if item.get("key_characters"):
+            extras.append("人物：" + "、".join(item["key_characters"]))
+        if item.get("key_locations"):
+            extras.append("地点：" + "、".join(item["key_locations"]))
+        if item.get("key_events"):
+            extras.append("事件：" + "、".join(item["key_events"]))
+        suffix = f" {'；'.join(extras)}" if extras else ""
+        lines.append(
             f"- {item.get('label', '待复核')}："
-            f"{item.get('summary', '该阶段摘要待复核。')}"
-            f"{' 女主焦点：' + item['heroine_focus'] if item.get('heroine_focus') else ''}"
+            f"{item.get('summary', '该阶段摘要待复核。')}{suffix}"
         )
-        for item in items
-    )
+    return "\n".join(lines)
 
 
 def _render_graph_character_lines(items: list[dict], fallback: str) -> list[str]:
@@ -238,11 +305,15 @@ def heuristic_graph_scan_markdown(novel_input: NovelInput, graph: LightweightGra
     main_text = _strip_toc(novel_input.raw_text)
     chapters = _split_chapters(main_text)
     protagonist = _graph_value(graph, "protagonist", "主角待复核") or "主角待复核"
+    character_profiles = _graph_items(graph, "character_profiles")
     heroine_candidates = _graph_items(graph, "heroine_candidates")
     heroine_profiles = _graph_items(graph, "heroine_profiles") or heroine_candidates
     supporting_profiles = _graph_items(graph, "supporting_profiles")
     protagonist_profile = _graph_value(graph, "protagonist_profile")
     core_characters = _graph_items(graph, "core_characters")
+    location_profiles = _graph_items(graph, "location_profiles")
+    faction_profiles = _graph_items(graph, "faction_profiles")
+    plot_threads = _graph_items(graph, "plot_threads")
     relation_items = _graph_items(graph, "relationship_highlights")
     worldline_order = _graph_value(graph, "worldline_order", []) or []
     segment_overview = _graph_items(graph, "segment_overview")
@@ -268,74 +339,101 @@ def heuristic_graph_scan_markdown(novel_input: NovelInput, graph: LightweightGra
     depress_lines = _build_depress_lines(tags, heroine_pool_size)
     reader_fit, reader_caution = _build_reader_fit(tags)
     graph_summary = summarize_graph(graph)
-    graph_method = _graph_value(graph, "profile_method", "entity -> profile -> scan")
+    graph_method = _graph_value(graph, "profile_method", "llm chunk -> story graph -> reduce")
 
-    headline_tail: list[str] = []
-    if "无限" in tags:
-        headline_tail.append("无限后宫")
+    if heroine_pool_size > 0:
+        headline_tail: list[str] = []
+        if "无限" in tags:
+            headline_tail.append("无限后宫")
+        else:
+            headline_tail.append("诸天后宫")
+        if "推土机" in tags:
+            headline_tail.append("推背感强")
+        if "曹贼" in tags:
+            headline_tail.append("曹贼爽文")
+        elif "车速快" in tags:
+            headline_tail.append("高位爽文")
+        headline = (
+            f"{status if status == '完结' else '长篇'}粮草："
+            f"{_headline_count(heroine_pool_size)}女主的{' '.join(headline_tail)} {word_count_display}"
+        )
     else:
-        headline_tail.append("诸天后宫")
-    if "推土机" in tags:
-        headline_tail.append("推背感强")
-    if "曹贼" in tags:
-        headline_tail.append("曹贼爽文")
-    elif "车速快" in tags:
-        headline_tail.append("高位爽文")
-    headline = (
-        f"{status if status == '完结' else '长篇'}粮草："
-        f"{_headline_count(heroine_pool_size)}女主的{' '.join(headline_tail)} {word_count_display}"
-    )
+        headline = (
+            f"{status if status == '完结' else '长篇'}图谱稿："
+            f"{len(character_profiles) or len(core_characters)}人物 / "
+            f"{len(plot_threads)}剧情线 / {word_count_display}"
+        )
 
     protagonist_profile = dict(
         protagonist_profile
         or {
             "name": protagonist,
-            "role": "男主",
-            "summary": (
-                f"{protagonist}是典型的诸天推土机男主，靠资源差与跨界扩张一路滚雪球。"
-            ),
-            "tags": ["诸天推土机", "资源滚雪球"],
-            "risk_tags": ["无明显六雷硬证据"],
+            "role": "主角",
+            "summary": f"{protagonist}是当前图谱识别出的主角，负责串联全书主要人物与剧情线。",
+            "tags": ["主角"],
+            "risk_tags": ["待复核"],
         }
     )
     protagonist_profile["tags"] = list(protagonist_profile.get("tags") or [])
     protagonist_profile["risk_tags"] = list(protagonist_profile.get("risk_tags") or [])
-    if "曹贼" in tags and "曹贼向" not in protagonist_profile["tags"]:
+    if heroine_pool_size > 0 and "曹贼" in tags and "曹贼向" not in protagonist_profile["tags"]:
         protagonist_profile["tags"].append("曹贼向")
-    if "车速快" in tags and "车速快" not in protagonist_profile["tags"]:
+    if heroine_pool_size > 0 and "车速快" in tags and "车速快" not in protagonist_profile["tags"]:
         protagonist_profile["tags"].append("车速快")
-    if "曹贼" in tags and "曹贼口味偏重" not in protagonist_profile["risk_tags"]:
+    if heroine_pool_size > 0 and "曹贼" in tags and "曹贼口味偏重" not in protagonist_profile["risk_tags"]:
         protagonist_profile["risk_tags"].append("曹贼口味偏重")
-    if "感情推进快" not in protagonist_profile["risk_tags"]:
+    if heroine_pool_size > 0 and "感情推进快" not in protagonist_profile["risk_tags"]:
         protagonist_profile["risk_tags"].append("感情推进快")
+
+    lead_title = "男主" if heroine_pool_size > 0 else "主角"
+    secondary_title = "女主" if heroine_profiles else "核心人物"
+    secondary_section = (
+        _render_grouped_heroine_profiles(heroine_profiles[:16], worldline_order)
+        if heroine_profiles
+        else _render_supporting_profiles(
+            [item for item in character_profiles if item.get("name") != protagonist][:8]
+            or [item for item in core_characters if item.get("name") != protagonist][:8]
+        )
+    )
 
     commentary = [
         (
-            "图谱结论：这一版不是单纯列关系边，而是把核心节点继续补成了人物档案，"
-            f"最后再用这些档案反推扫书结论，核心仍稳定落在 {protagonist} 身上。"
+            "图谱结论：这一版不再只围绕几条关系边，而是把人物、地点、势力、剧情线一起补成可复用档案，"
+            f"后续既能反推扫书，也能直接给原文做简明解说，主线核心稳定落在 {protagonist} 身上。"
         ),
         (
-            f"后宫结论：图谱侧高相关女主档案至少抽出 {len(heroine_profiles)} 个核心点位，"
-            f"池子规模估计在 {_headline_count(heroine_pool_size)} 这一档。"
+            f"覆盖范围：当前快照保留 {len(character_profiles) or len(core_characters)} 个人物、"
+            f"{len(location_profiles)} 个地点、{len(faction_profiles)} 个势力、{len(plot_threads)} 条剧情线，"
+            "比旧版只看男女主的结构完整得多。"
         ),
         (
-            f"世界线结论：{' -> '.join(arcs[:5])} 这种跨图推进很适合做扫书，"
-            "因为每换一界就会带来新的角色入口与关系扩张。"
+            f"世界线结论：{(' -> '.join(worldline_order[:6]) or '世界线待复核')}。"
+            "跨图推进会持续带来新人物入口、地点迁移和势力更替。"
         ),
         (
-            "阅读体验：这类书的爽点并不在细腻感情，而在位面切换、资源滚雪球、"
-            "高位女性角色持续并入主角网络。"
+            (
+                f"情感结论：图谱侧高相关情感角色至少抽出 {len(heroine_profiles)} 个核心点位，"
+                f"池子规模估计在 {_headline_count(heroine_pool_size)} 这一档。"
+            )
+            if heroine_pool_size > 0
+            else "叙事结论：当前图谱更偏向主线推进、人物扩张和世界线迁移，而不是单一恋爱线。"
         ),
         f"关系网络：{graph_summary}",
     ]
 
     relation_lines = _render_graph_relation_lines(relation_items[:8])
-    heroine_section = _render_grouped_heroine_profiles(heroine_profiles[:16], worldline_order)
     supporting_section = _render_supporting_profiles(
         supporting_profiles[:6]
-        or [item for item in core_characters if item.get("name") != protagonist][:6]
+        or [
+            item
+            for item in (character_profiles or core_characters)
+            if item.get("name") != protagonist and item.get("name") not in heroine_names
+        ][:6]
     )
     segment_overview_lines = _render_segment_overview(segment_overview[:10])
+    location_section = _render_context_profiles(location_profiles[:8], "1. 当前图谱未稳定抽出关键地点。")
+    faction_section = _render_context_profiles(faction_profiles[:8], "1. 当前图谱未稳定抽出关键势力。")
+    plot_section = _render_plot_threads(plot_threads[:10])
 
     return f"""# {headline}
 
@@ -357,32 +455,41 @@ def heuristic_graph_scan_markdown(novel_input: NovelInput, graph: LightweightGra
 )}
 
 ## 图谱方法
-- 参考 MiroFish 的核心路线：章节分块 -> 实体/关系抽取 -> 人物档案补全 -> 扫书成稿。
-- 当前是本地轻量实现，不依赖 Zep/LLM；档案字段主要来自图谱节点证据、角色标签、与男主的高频关系边。
+- 参考 MiroFish 的核心路线：章节分块 -> 实体/关系抽取 -> 档案补全 -> 跨段归约 -> 下游成稿。
 - 本轮图谱工作流：{graph_method}
 - 当前聚合范围：{source_segments} 个分段。
+- 图谱覆盖：{len(character_profiles) or len(core_characters)} 人物 / {len(location_profiles)} 地点 / {len(faction_profiles)} 势力 / {len(plot_threads)} 剧情线。
 
 ## 简介
 {_build_synopsis(protagonist, arcs)}
 
-## 男主
+## {lead_title}
 {_render_profile_card(protagonist_profile)}
 
-## 女主
-{heroine_section}
+## {secondary_title}
+{secondary_section}
 
-PS：按当前图谱保守估计，这本书对应的是
-**{_headline_count(heroine_pool_size)}**
-这一档的女主池规模，长名单仍建议按世界线继续人工补表。
+{"PS：按当前图谱保守估计，这本书对应的是" if heroine_pool_size > 0 else "PS：当前图谱不是只看恋爱线，而是已经把人物与剧情骨架一起展开。"}
+{"**" + _headline_count(heroine_pool_size) + "**" if heroine_pool_size > 0 else ""}
+{"这一档的女主池规模，长名单仍建议按世界线继续人工补表。" if heroine_pool_size > 0 else ""}
 
-## 知识图谱速览
+## 原文知识图谱
 ### 世界线推进
 {segment_overview_lines}
+
+### 剧情线索
+{plot_section}
+
+### 关键地点
+{location_section}
+
+### 关键势力
+{faction_section}
 
 ### 高频关系边
 {chr(10).join(relation_lines)}
 
-### 核心配角 / 关键节点
+### 关键配角 / 核心人物
 {supporting_section}
 
 ## 图谱结论
@@ -409,5 +516,5 @@ PS：按当前图谱保守估计，这本书对应的是
 {chr(10).join(f"- 慎入：{line}" for line in reader_caution)}
 
 ## 结语
-如果你要的是“先看图谱再判断值不值得扫”的工作流，这一版已经能直接给出主角核心、女主候选和高频关系边。对这本《星临诸天》而言，图谱和正文结论是一致的：它就是一部标准的长篇诸天推土机后宫爽文，读点在规模感和扩张感，不在细腻恋爱。
+这版输出的重点已经从“临时扫书稿”转成“可复用的小说知识图谱”。后续无论是继续做扫书，还是生成贴近原文的简单解说，优先都应该直接消费这份图谱，而不是再回到硬编码规则。
 """.strip()
