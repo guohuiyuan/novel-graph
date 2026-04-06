@@ -23,10 +23,23 @@ _load_env_once()
 
 
 class LLMClient:
-    def __init__(self, model: str | None = None) -> None:
-        self.api_key = os.getenv("OPENAI_API_KEY", "").strip()
-        self.base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").strip()
-        self.model = model or os.getenv("OPENAI_MODEL", "gpt-5.4")
+    def __init__(self, model: str | None = None, profile: str = "default") -> None:
+        self.profile = profile.strip().lower() or "default"
+        self.api_key, self.base_url, env_model = self._resolve_config(self.profile)
+        self.model = model or env_model
+
+    @staticmethod
+    def _resolve_config(profile: str) -> tuple[str, str, str]:
+        base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").strip()
+        model = os.getenv("OPENAI_MODEL", "gpt-5.4").strip() or "gpt-5.4"
+        api_key = os.getenv("OPENAI_API_KEY", "").strip()
+
+        if profile == "graph":
+            api_key = os.getenv("GRAPH_OPENAI_API_KEY", api_key).strip()
+            base_url = os.getenv("GRAPH_OPENAI_BASE_URL", base_url).strip()
+            model = os.getenv("GRAPH_OPENAI_MODEL", model).strip() or model
+
+        return api_key, base_url, model
 
     @property
     def enabled(self) -> bool:
@@ -172,6 +185,7 @@ class LLMClient:
         message = str(exc).strip()
         return (
             "LLM 调用失败。"
+            f" profile={self.profile};"
             f" base_url={self.base_url};"
             f" model={self.model};"
             f" error={type(exc).__name__}: {message}"

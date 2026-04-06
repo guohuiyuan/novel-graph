@@ -75,7 +75,19 @@ cp .env.example .env
 OPENAI_API_KEY=your_api_key
 OPENAI_BASE_URL=https://jj20cm.us.ci/v1
 OPENAI_MODEL=gpt-5.4
+
+# 可选：图谱提取/归约专用 API（未配置时回退到上面这组）
+GRAPH_OPENAI_API_KEY=your_graph_api_key
+GRAPH_OPENAI_BASE_URL=https://cheap-2api.example.com/v1
+GRAPH_OPENAI_MODEL=qwen-plus
 ```
+
+说明：
+
+- `OPENAI_*`：默认给 `direct` 和其他非图谱流程使用
+- `GRAPH_OPENAI_*`：只给 `graph` 流程使用，包括分段提取和跨段归约
+- 如果 `GRAPH_OPENAI_*` 没配，就自动回退到 `OPENAI_*`
+- CLI 里的 `--model` 仍然是全局覆盖；如果你想让两个流程用不同模型，直接不要传 `--model`，改用两组环境变量分别控制
 
 运行：
 

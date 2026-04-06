@@ -1063,7 +1063,7 @@ def _reduce_graph_batch(
         return graphs[0]
 
     prompt_template = read_prompt("graph_reduce.md")
-    llm = LLMClient(model=model)
+    llm = LLMClient(model=model, profile="graph")
     batch_payload = {
         "title": novel_input.title,
         "segment_count": len(graphs),
@@ -1221,7 +1221,7 @@ def _build_llm_graph_once(novel_input: NovelInput, model: str | None = None) -> 
         text_excerpt=novel_input.raw_text,
     )
 
-    llm = LLMClient(model=model)
+    llm = LLMClient(model=model, profile="graph")
     payload = llm.generate_json(system_prompt=SYSTEM_PROMPT, user_prompt=prompt)
     protagonist = _coerce_str(payload.get("protagonist"))
     protagonist_profile = payload.get("protagonist_profile") or {}
